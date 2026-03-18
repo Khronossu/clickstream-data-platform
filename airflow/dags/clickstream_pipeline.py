@@ -10,7 +10,7 @@ default_args = {
     'start_date': datetime(2026, 3, 18),
     'email_on_failure': False,
     'retries': 1,
-    'retry_delay': timedelta(seconds=30),
+    'retry_delay': timedelta(seconds=10),
 }
 
 # 2. Instantiate the DAG
@@ -30,11 +30,13 @@ with DAG(
     run_bronze_to_silver = BashOperator(
         task_id='bronze_to_silver_cleaning',
         bash_command='python /opt/airflow/spark/batch/bronze_to_silver.py',
+        cwd='/opt/airflow'
     )
 
     run_silver_to_gold = BashOperator(
         task_id='silver_to_gold_aggregations',
         bash_command='python /opt/airflow/spark/batch/silver_to_gold.py',
+        cwd='/opt/airflow'
     )
 
     # 4. Define the Execution Order
