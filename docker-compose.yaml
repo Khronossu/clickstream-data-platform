@@ -7,6 +7,7 @@ x-airflow-common:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__WEBSERVER__SECRET_KEY: 'my_secret_key_krub_pom_67'
   volumes:
     # Map your local folders so Airflow can run your exact scripts
     - ./airflow/dags:/opt/airflow/dags
