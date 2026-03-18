@@ -1,0 +1,20 @@
+{
+  "expectation_suite_name": "clickstream_bronze_checks",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "user_id" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": { "column": "event_id" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "event_type",
+        "value_set": ["click", "view", "purchase", "scroll"]
+      }
+    }
+  ]
+}
