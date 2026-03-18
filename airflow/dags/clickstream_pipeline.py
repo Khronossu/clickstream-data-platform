@@ -10,7 +10,7 @@ default_args = {
     'start_date': datetime(2026, 3, 18),
     'email_on_failure': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(seconds=30),
 }
 
 # 2. Instantiate the DAG
