@@ -1,33 +1,19 @@
-# Clickstream Data Platform
+# End-to-End Clickstream Data Platform (Medallion Architecture)
 
-A local-first clickstream pipeline that simulates user traffic, ingests events with Kafka, and lands structured streaming output into a Bronze layer in Parquet.
+## Project Overview
 
-## Overview
+This project is a fully containerized, distributed data pipeline designed to ingest, process, and aggregate real-time clickstream data. Built around the __Medallion Architecture__ (Bronze, Silver, Gold), the platform simulates a high-throughput e-commerce environment, processing raw user events into actionable business intelligence metrics.
 
-This project demonstrates a Medallion-style data architecture focused on the ingestion and Bronze stages:
+The infrastructure is heavily decoupled, utilizing __Kafka__ for real-time message brokering, __PySpark Structured Streaming__ for continuous ingestion, and __Apache Airflow__ for orchestrating idempotent batch transformations and data quality checks.
 
-1. Generate synthetic clickstream events.
-2. Publish events to Kafka.
-3. Consume with Spark Structured Streaming.
-4. Persist partitioned Parquet files to `data/bronze`.
+## Architecture Flow
 
-## Current Status
+1. __Event Generation:__ A Python producer simulates live e-commerce web traffic, generating JSON payloads (User IDs, Page Views, Timestamps) and streaming them to a Kafka topic.
+2. __Bronze Layer (Raw Ingestion):__ A PySpark Structured Streaming job consumes the Kafka topic in real-time, checkpointing the offsets and writing the raw data as partitioned Parquet files (`/year/month/day`).
+3. __Silver Layer (Cleansed & Validated):__ An Airflow-orchestrated PySpark batch job reads the Bronze data. It utilizes __Great Expectations__ to enforce strict data contracts (null checks, deduplication, schema validation) before performing idempotent overwrites into the Silver layer.
+4. __Gold Layer (Business Aggregations):__ A final Airflow task aggregates the cleansed Silver data into business-critical metrics (Daily Active Users, Top Pages by Traffic, Session Analytics) for downstream BI consumption.
 
-Implemented now:
-
-1. Kafka + Zookeeper via Docker Compose.
-2. Python event producer (`event_generator/producer.py`).
-3. Spark streaming ingestion job (`spark/streaming/kafka_to_bronze.py`).
-4. Bronze output with checkpointing and date partitioning.
-
-Planned / WIP:
-
-1. Data quality layer.
-2. Silver transformations.
-3. Gold aggregations.
-4. Airflow orchestration.
-
-## Architecture
+## Tech Stack & Engineering Highlights
 
 ```text
 Event Generator (Python)
@@ -38,27 +24,23 @@ Event Generator (Python)
 
 ## Tech Stack
 
-1. Docker + Docker Compose
-2. Apache Kafka + Zookeeper
-3. PySpark (Structured Streaming)
-4. Python 3.11
-5. Local filesystem data lake simulation
+* __Data Processing:__ PySpark (3.5.0), Python 3.11
 
-## Event Schema
+* __Streaming & Messaging:__ Apache Kafka, Zookeeper
 
-Incoming event payloads follow this JSON structure:
+* __Orchestration:__ Apache Airflow (2.8.1) running on LocalExecutor
 
-```json
-{
-  "event_id": "UUID",
-  "user_id": "string",
-  "session_id": "UUID",
-  "event_type": "click | view | purchase | scroll",
-  "page": "string",
-  "device": "mobile | desktop | tablet",
-  "timestamp": "ISO-8601 UTC"
-}
-```
+* __Data Quality:__ Great Expectations (Data Contracts & JSON Suites)
+
+* __Infrastructure:__ Docker & Docker Compose (Custom built for cross-platform compatibility, including Apple Silicon/ARM64 support).
+
+## Key Engineering Decisions
+
+* __Fault Tolerance:__ Implemented Spark checkpointing to guarantee exactly-once processing and seamless recovery from stream failures.
+
+* __Idempotency:__ Silver and Gold batch transformations are designed to be fully idempotent, allowing for safe backfilling and DAG retries without data duplication.
+
+* __Data Contracts:__ Shifted data quality to the left by enforcing JSON-based Great Expectations rules before data enters the Silver layer, preventing downstream corruption.
 
 ## Repository Layout
 
@@ -143,3 +125,7 @@ rm -rf data/bronze data/checkpoints
 1. The Kafka topic `clickstream-events` is auto-created by the current broker config.
 2. The streaming job uses `startingOffsets=earliest`, so it can replay existing events.
 3. Watermarking is set to `10 minutes` in the Spark job.
+
+## License
+
+[MIT](https://choosealicense.com/licenses/mit/)
