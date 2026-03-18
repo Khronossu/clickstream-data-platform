@@ -19,11 +19,17 @@ silver_path = os.path.join(base_dir, "data", "silver")
 rules_path = os.path.join(base_dir, "data_quality", "expectations", "clickstream_suite.json")
 
 # 1. Read the Raw Bronze Data
-print(f"Reading raw data from: {bronze_path}")
+# We append /*/*/* to force Spark to read the physical files and ignore the Mac's hidden metadata log.
+globbed_path = os.path.join(bronze_path, "*", "*", "*")
+print(f"Reading raw data from: {globbed_path}")
+
 try:
-    bronze_df = spark.read.parquet(bronze_path)
+    bronze_df = spark.read \
+        .option("basePath", bronze_path) \
+        .parquet(globbed_path)
 except Exception as e:
-    print("Error reading Bronze data.")
+    # Pro-tip: Always print the actual error 'e' so it doesn't fail silently!
+    print(f"Error reading Bronze data: {e}") 
     exit(1)
 
 # 2. Load the Data Contract (JSON)
