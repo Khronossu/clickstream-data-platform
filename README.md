@@ -13,9 +13,8 @@ The infrastructure is heavily decoupled, utilizing __Kafka__ for real-time messa
 |- docker-compose.yaml
 |- Dockerfile
 |- airflow/
-|  |- dag/
-|     |- dags/
-|        |- clickstream_pipeline.py
+|  |- dags/
+|     |- clickstream_pipeline.py
 |- event_generator/
 |  |- producer.py
 |- spark/
