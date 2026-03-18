@@ -13,6 +13,7 @@ x-airflow-common:
     - ./airflow/dags:/opt/airflow/dags
     - ./spark:/opt/airflow/spark
     - ./data:/opt/airflow/data
+    - ./data_quality:/opt/airflow/data_quality
   depends_on:
     - postgres
 
