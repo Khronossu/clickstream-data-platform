@@ -6,6 +6,36 @@ This project is a fully containerized, distributed data pipeline designed to ing
 
 The infrastructure is heavily decoupled, utilizing __Kafka__ for real-time message brokering, __PySpark Structured Streaming__ for continuous ingestion, and __Apache Airflow__ for orchestrating idempotent batch transformations and data quality checks.
 
+## Repository Layout
+
+```text
+.
+|- docker-compose.yaml
+|- Dockerfile
+|- airflow/
+|  |- dag/
+|     |- dags/
+|        |- clickstream_pipeline.py
+|- event_generator/
+|  |- producer.py
+|- spark/
+|  |- streaming/
+|     |- kafka_to_bronze.py
+|  |- batch/
+|     |- bronze_to_silver.py
+|     |- silver_to_gold.py
+|     |- validate_bronze.py
+|- data/
+|  |- bronze/
+|  |- silver/
+|  |- gold/
+|  |- checkpoints/
+|- data_quality/
+|  |- expectations/
+|     |- clickstream_suite.json
+```
+
+
 ## Architecture Flow
 
 1. __Event Generation:__ A Python producer simulates live e-commerce web traffic, generating JSON payloads (User IDs, Page Views, Timestamps) and streaming them to a Kafka topic.
@@ -14,15 +44,6 @@ The infrastructure is heavily decoupled, utilizing __Kafka__ for real-time messa
 4. __Gold Layer (Business Aggregations):__ A final Airflow task aggregates the cleansed Silver data into business-critical metrics (Daily Active Users, Top Pages by Traffic, Session Analytics) for downstream BI consumption.
 
 ## Tech Stack & Engineering Highlights
-
-```text
-Event Generator (Python)
-  -> Kafka topic: clickstream-events
-  -> Spark Structured Streaming
-  -> Bronze Lake (Parquet)
-```
-
-## Tech Stack
 
 * __Data Processing:__ PySpark (3.5.0), Python 3.11
 
@@ -34,7 +55,8 @@ Event Generator (Python)
 
 * __Infrastructure:__ Docker & Docker Compose (Custom built for cross-platform compatibility, including Apple Silicon/ARM64 support).
 
-## Key Engineering Decisions
+
+### Key Engineering Decisions
 
 * __Fault Tolerance:__ Implemented Spark checkpointing to guarantee exactly-once processing and seamless recovery from stream failures.
 
@@ -42,20 +64,6 @@ Event Generator (Python)
 
 * __Data Contracts:__ Shifted data quality to the left by enforcing JSON-based Great Expectations rules before data enters the Silver layer, preventing downstream corruption.
 
-## Repository Layout
-
-```text
-.
-|- docker-compose.yaml
-|- event_generator/
-|  |- producer.py
-|- spark/
-|  |- streaming/
-|     |- kafka_to_bronze.py
-|- data/
-|  |- bronze/
-|  |- checkpoints/
-```
 
 ## Prerequisites
 
@@ -65,66 +73,45 @@ Event Generator (Python)
 
 ## Quick Start
 
-### 1) Start Kafka Infrastructure
+### 1) Boot the Infrastructure
 
 ```bash
 docker compose up -d
 ```
 
-### 2) Create Python Environment
-
-```bash
-python3.11 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install pyspark confluent-kafka faker
-```
-
-### 3) Run Event Producer
-
-In terminal A:
+### 2) Start the Live Data Stream
+__Terminal A (The Producer):__
 
 ```bash
 python event_generator/producer.py
 ```
-
-### 4) Run Streaming Consumer (Kafka -> Bronze)
-
-In terminal B:
-
+__Terminal B (The Ingestor):__
 ```bash
 python spark/streaming/kafka_to_bronze.py
 ```
 
-### 5) Verify Bronze Output
+### 3) Orchestrate the Transformations
 
+1. Navigate to the Airflow UI at `http://localhost:8080` (Default credentials: `admin / admin`).
+
+2. Unpause the `clickstream_medallion_pipeline` DAG.
+
+3. Trigger the DAG manually to process the Bronze data through the Silver and Gold transformations.
+
+### 4) View the Business Dashboard
+Once the Airflow tasks succeed, run the analytics engine to view the final Gold layer metrics:
 ```bash
-find data/bronze -maxdepth 4 -type d | sort
+python query_gold.py
 ```
-
-You should see date-partitioned output like:
-
-```text
-data/bronze/year=2026/month=3/day=18
-```
-
-## Stop and Cleanup
-
-```bash
-docker compose down -v
-```
-
-To also remove generated local data:
-
-```bash
-rm -rf data/bronze data/checkpoints
-```
+#### Sample Output (Gold Layer)
+The pipeline successfully generates analytics ready for BI dashboards:
+* __Daily Active Users (DAU):__ Tracks unique users interacting with the platform per day.
+* __Top Pages by Traffic:__ Ranks the most visited routes (e.g.,` /checkout, /products`).
+* __Session Analytics:__ Calculates average session duration and engagement depth.
 
 ## Notes
 
-1. The Kafka topic `clickstream-events` is auto-created by the current broker config.
-2. The streaming job uses `startingOffsets=earliest`, so it can replay existing events.
-3. Watermarking is set to `10 minutes` in the Spark job.
+1. Watermarking is set to `10 minutes` in the Spark job.
 
 ## License
 
