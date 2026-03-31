@@ -2,20 +2,24 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, countDistinct, count, min, max, unix_timestamp
 
+warehouse_path = os.path.join(os.getcwd(), "data", "iceberg_warehouse")
+
 print("Initializing Spark for Gold Layer Aggregations...")
 spark = SparkSession.builder \
     .appName("Clickstream-Silver-to-Gold") \
+    .config("spark.jars.packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.3") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.local.type", "hadoop") \
+    .config("spark.sql.catalog.local.warehouse", warehouse_path) \
     .master("local[*]") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
 
-silver_path = os.path.join(os.getcwd(), "data", "silver")
-gold_path = os.path.join(os.getcwd(), "data", "gold")
-
-print(f"Reading clean data from Silver Layer: {silver_path}")
+print("Reading clean data from Iceberg table: local.clickstream.silver")
 try:
-    silver_df = spark.read.parquet(silver_path)
+    silver_df = spark.table("local.clickstream.silver")
 except Exception as e:
     print("Error reading Silver data. Make sure Step 4 completed successfully.")
     exit(1)
@@ -28,8 +32,7 @@ dau_df = silver_df.groupBy("year", "month", "day") \
     .agg(countDistinct("user_id").alias("daily_active_users")) \
     .orderBy("year", "month", "day")
 
-dau_path = os.path.join(gold_path, "dau")
-dau_df.write.mode("overwrite").parquet(dau_path)
+dau_df.writeTo("local.clickstream.gold_dau").using("iceberg").createOrReplace()
 
 # 2. Page Popularity (Views only)
 print("Generating Page Popularity table...")
@@ -38,8 +41,7 @@ page_views_df = silver_df.filter(col("event_type") == "view") \
     .agg(count("*").alias("total_views")) \
     .orderBy(col("total_views").desc())
 
-page_views_path = os.path.join(gold_path, "page_views")
-page_views_df.write.mode("overwrite").parquet(page_views_path)
+page_views_df.writeTo("local.clickstream.gold_page_views").using("iceberg").createOrReplace()
 
 # 3. Session Metrics
 print("Generating Session Metrics table...")
@@ -49,11 +51,10 @@ session_df = silver_df.groupBy("session_id") \
         min("timestamp").alias("session_start"),
         max("timestamp").alias("session_end")
     ) \
-    .withColumn("duration_seconds", 
+    .withColumn("duration_seconds",
                 unix_timestamp("session_end") - unix_timestamp("session_start"))
 
-session_path = os.path.join(gold_path, "sessions")
-session_df.write.mode("overwrite").parquet(session_path)
+session_df.writeTo("local.clickstream.gold_sessions").using("iceberg").createOrReplace()
 
 # Print results to the terminal for verification
 print("\n--- GOLD LAYER RESULTS ---")

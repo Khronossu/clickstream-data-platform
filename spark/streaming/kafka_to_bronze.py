@@ -3,11 +3,19 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, year, month, dayofmonth
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 
-# 1. Initialize Spark Session with Kafka dependencies
+warehouse_path = os.path.join(os.getcwd(), "data", "iceberg_warehouse")
+
+# 1. Initialize Spark Session with Kafka + Iceberg dependencies
 print("Initializing Spark Session...")
 spark = SparkSession.builder \
     .appName("Clickstream-Kafka-to-Bronze") \
-    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+    .config("spark.jars.packages",
+            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,"
+            "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.3") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.local.type", "hadoop") \
+    .config("spark.sql.catalog.local.warehouse", warehouse_path) \
     .master("local[*]") \
     .getOrCreate()
 
@@ -50,19 +58,34 @@ enriched_df = parsed_df \
     .withColumn("month", month("timestamp")) \
     .withColumn("day", dayofmonth("timestamp"))
 
-# 6. Write Stream to Bronze Layer (Parquet format)
-output_path = os.path.join(os.getcwd(), "data", "bronze")
+# 6. Create the Bronze Iceberg table if it doesn't exist
+spark.sql("""
+    CREATE TABLE IF NOT EXISTS local.clickstream.bronze (
+        event_id STRING,
+        user_id STRING,
+        session_id STRING,
+        event_type STRING,
+        page STRING,
+        device STRING,
+        timestamp TIMESTAMP,
+        year INT,
+        month INT,
+        day INT
+    )
+    USING iceberg
+    PARTITIONED BY (year, month, day)
+""")
+
+# 7. Write Stream to Bronze Layer (Iceberg format)
 checkpoint_path = os.path.join(os.getcwd(), "data", "checkpoints", "bronze")
 
-print(f"Starting stream... writing Parquet files to: {output_path}")
+print("Starting stream... writing to Iceberg table: local.clickstream.bronze")
 
 query = enriched_df.writeStream \
-    .format("parquet") \
-    .option("path", output_path) \
-    .option("checkpointLocation", checkpoint_path) \
-    .partitionBy("year", "month", "day") \
+    .format("iceberg") \
     .outputMode("append") \
-    .start()
+    .option("checkpointLocation", checkpoint_path) \
+    .toTable("local.clickstream.bronze")
 
 # Keep the streaming process alive
 query.awaitTermination()
