@@ -4,9 +4,16 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from great_expectations.dataset import SparkDFDataset
 
+warehouse_path = os.path.join(os.getcwd(), "data", "iceberg_warehouse")
+
 print("Initializing Configuration-Driven Batch Job...")
 spark = SparkSession.builder \
     .appName("Clickstream-Bronze-to-Silver-Dynamic") \
+    .config("spark.jars.packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.3") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.local.type", "hadoop") \
+    .config("spark.sql.catalog.local.warehouse", warehouse_path) \
     .master("local[*]") \
     .getOrCreate()
 
@@ -14,22 +21,15 @@ spark.sparkContext.setLogLevel("WARN")
 
 # Define Paths
 base_dir = os.getcwd()
-bronze_path = os.path.join(base_dir, "data", "bronze")
-silver_path = os.path.join(base_dir, "data", "silver")
 rules_path = os.path.join(base_dir, "data_quality", "expectations", "clickstream_suite.json")
 
-# 1. Read the Raw Bronze Data
-# We append /*/*/* to force Spark to read the physical files and ignore the Mac's hidden metadata log.
-globbed_path = os.path.join(bronze_path, "*", "*", "*")
-print(f"Reading raw data from: {globbed_path}")
+# 1. Read the Raw Bronze Data from Iceberg
+print("Reading raw data from Iceberg table: local.clickstream.bronze")
 
 try:
-    bronze_df = spark.read \
-        .option("basePath", bronze_path) \
-        .parquet(globbed_path)
+    bronze_df = spark.table("local.clickstream.bronze")
 except Exception as e:
-    # Pro-tip: Always print the actual error 'e' so it doesn't fail silently!
-    print(f"Error reading Bronze data: {e}") 
+    print(f"Error reading Bronze data: {e}")
     exit(1)
 
 # 2. Load the Data Contract (JSON)
@@ -82,12 +82,12 @@ for expectation in suite["expectations"]:
         print(f"-> Filtering {column} to allowed values: {value_set}")
         silver_df = silver_df.filter(col(column).isin(value_set))
 
-# 5. Idempotent Write to Silver
-print(f"\nWriting cleaned data to Silver Layer: {silver_path}")
-silver_df.write \
-    .mode("overwrite") \
-    .partitionBy("year", "month", "day") \
-    .parquet(silver_path)
+# 5. Idempotent Write to Silver (Iceberg)
+print("\nWriting cleaned data to Iceberg table: local.clickstream.silver")
+silver_df.writeTo("local.clickstream.silver") \
+    .using("iceberg") \
+    .partitionedBy("year", "month", "day") \
+    .createOrReplace()
 
 print("\n=== SAMPLE OF CLEANED SILVER DATA ===")
 silver_df.select("user_id", "event_type", "page", "device", "timestamp").show(10, truncate=False)
