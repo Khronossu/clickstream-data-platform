@@ -6,6 +6,12 @@ from great_expectations.dataset import SparkDFDataset
 print("Initializing Spark for Data Validation...")
 spark = SparkSession.builder \
     .appName("Bronze-Data-Validation") \
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.executor.memory", "2g") \
+    .config("spark.sql.shuffle.partitions", "8") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
     .master("local[*]") \
     .getOrCreate()
 
