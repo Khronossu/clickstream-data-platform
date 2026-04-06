@@ -12,6 +12,12 @@ spark = SparkSession.builder \
     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
     .config("spark.sql.catalog.local.type", "hadoop") \
     .config("spark.sql.catalog.local.warehouse", warehouse_path) \
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.executor.memory", "2g") \
+    .config("spark.sql.shuffle.partitions", "8") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
     .master("local[*]") \
     .getOrCreate()
 
